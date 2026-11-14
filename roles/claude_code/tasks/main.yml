@@ -22,6 +22,16 @@
     path: "{{ claude_code_bwrap_profile }}"
   register: claude_code_profile
 
+# AppArmor reads it at boot, but Zorin does not ship it (found on the test VM).
+- name: Create AppArmor's disable directory
+  ansible.builtin.file:
+    path: /etc/apparmor.d/disable
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: claude_code_disable_bwrap_profile and claude_code_profile.stat.exists
+
 # A link in /etc/apparmor.d/disable/ is AppArmor's own way to turn a profile
 # off: the file of the package stays untouched and upgrades respect the link.
 - name: Disable Zorin's bwrap profile (survives package upgrades)

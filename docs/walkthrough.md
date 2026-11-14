@@ -323,13 +323,13 @@ Purpose: Claude Code runs only as `v`, from a project folder, at a version chose
 **Install the sandbox tools and gpgv**
 `bubblewrap` (the sandbox), `socat` (carries the sandbox's network traffic to Claude Code's filtering proxy), `gpg` and `gpgv` (the release signature). All four are in Ubuntu's `main`, with security support from Canonical.
 
-**Look for Zorin's AppArmor profile for bwrap** / **Disable Zorin's bwrap profile** / **Unload Zorin's bwrap profile now**
+**Look for Zorin's AppArmor profile for bwrap** / **Create AppArmor's disable directory** / **Disable Zorin's bwrap profile** / **Unload Zorin's bwrap profile now**
 
 The problem, found on the test VM: Claude Code's sandbox starts bubblewrap, and inside it creates a second, nested user namespace to apply a seccomp filter (which blocks Unix sockets: D-Bus, the GNOME keyring, an SSH agent). Zorin ships `/etc/apparmor.d/bwrap-userns-restrict-patched` (package `zorin-os-default-settings`), which moves everything started by `bwrap` into the profile `unpriv_bwrap` and denies it every capability. The nested namespace then cannot be set up, and every command fails with `apply-seccomp: write /proc/self/setgroups (nested userns is capability-restricted ...)`; the kernel logs `apparmor="DENIED" operation="capable" profile="unpriv_bwrap" capname="sys_admin"`.
 
 What the profile protects: with `kernel.apparmor_restrict_unprivileged_userns = 0` (Zorin's setting), an ordinary process can create user namespaces anyway. The profile only limits what runs **inside** bwrap: Flatpak apps and the Claude Code sandbox. Flatpak, though, already blocks the creation of user namespaces with its own seccomp filter: on the VM, with the profile unloaded, `unshare -U` inside a Flatpak still fails with "Operation not permitted". Disabling the profile therefore costs nothing for Flatpak apps.
 
-How: a link in `/etc/apparmor.d/disable/` is AppArmor's own mechanism. The package's file stays untouched, and an upgrade of `zorin-os-default-settings` that changes the profile does not turn it back on. The link acts at boot, so the role also unloads the profile now with `apparmor_parser -R` (a profile that is not loaded is not an error). If Zorin renames the file, change `claude_code_bwrap_profile`.
+How: a link in `/etc/apparmor.d/disable/` is AppArmor's own mechanism (Zorin does not ship that directory: the role creates it). The package's file stays untouched, and an upgrade of `zorin-os-default-settings` that changes the profile does not turn it back on. The link acts at boot, so the role also unloads the profile now with `apparmor_parser -R` (a profile that is not loaded is not an error). If Zorin renames the file, change `claude_code_bwrap_profile`.
 
 Alternatives considered: a dedicated AppArmor profile for Claude's bwrap (precise, but a policy to write and maintain, fragile across updates); `enableWeakerNestedSandbox` (mounts the host's `/proc` into the sandbox; the documentation says it "considerably weakens security"); `allowNestedUserNamespaces` (lets sandboxed code create namespaces, which the documentation calls a security boundary turned off).
 
